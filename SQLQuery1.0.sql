@@ -1,0 +1,195 @@
+SELECT *
+FROM ProtfolioProject..CovidDeaths$
+
+SELECT *
+FROM ProtfolioProject..CovidVaccinations$
+
+select location, date, total_cases, new_cases, total_deaths, population
+from ProtfolioProject..CovidDeaths$
+order by 1, 2
+
+--looking at total cases vs total deaths
+-- looks like there death percentage is slowly increasing over time.
+
+select location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+from ProtfolioProject..CovidDeaths$
+where location like '%Nepal%'
+order by 1, 2
+
+--looking at total cases vs population( shows what percentage of total population got covid)
+select location, date, total_cases,population , (total_cases/population)*100 as CovidPercentagePopulation
+from ProtfolioProject..CovidDeaths$
+where location like '%Nepal%'
+order by 1, 2
+
+--looking at higest infected rate compared to population
+
+select location,  max(total_cases),population , (max(total_cases/population))*100 as PercentagePopulationInfected
+from ProtfolioProject..CovidDeaths$
+--where location like '%Nepal%'
+group by location,population
+order by 4 desc
+
+--showing countries with higest dealth count 
+select location, max(cast(total_deaths as int))as TotalDeathCount
+from ProtfolioProject..CovidDeaths$
+--where location like '%Nepal%'
+where continent is not NULL
+group by location
+order by TotalDeathCount desc
+
+select location, max(cast(total_deaths as int))as TotalDeathCount
+from ProtfolioProject..CovidDeaths$
+--where location like '%Nepal%'
+where continent is NULL
+group by location
+order by TotalDeathCount desc
+
+--let's break things by continent
+--showing countinents with higest death
+ 
+select continent, max(cast(total_deaths as int))as TotalDeathCount
+from ProtfolioProject..CovidDeaths$
+--where location like '%Nepal%'
+where continent is not NULL
+group by continent
+order by TotalDeathCount desc
+
+--Global Numbers
+select date, sum(new_cases) as TotalCases, max(cast(new_deaths as int))as TotalDeathCount,( max(cast(new_deaths as int))/sum(new_cases)) as GlobalDeathPercentage
+from ProtfolioProject..CovidDeaths$
+--where location like '%Nepal%'
+where continent is not NULL
+group by date
+order by 1 desc
+
+select sum(new_cases) as TotalCases, max(cast(new_deaths as int))as TotalDeathCount,( max(cast(new_deaths as int))/sum(new_cases)) as GlobalDeathPercentage
+from ProtfolioProject..CovidDeaths$
+--where location like '%Nepal%'
+where continent is not NULL
+--group by date
+order by 1,2 desc
+
+--Looking at total population vs vaccination
+
+select dea.date, dea.continent, dea.location, dea.population, vac.new_vaccinations
+from ProtfolioProject..CovidDeaths$ as dea
+join ProtfolioProject..CovidVaccinations$ as vac
+on dea.location= vac.location
+and dea.date = vac.date
+where dea.continent is not NULL
+order by 1,3
+
+--sum(convert(int, vac.new_vaccination)) = sum(cast(vac=new.vaccination as int))
+select dea.date, dea.continent, dea.location, dea.population, vac.new_vaccinations,
+sum(convert(int,vac.new_vaccinations))over(partition by dea.location, dea.date) as RollingPeopleVaccinated
+--,(RollingPeopleVaccinated/population)*100
+from ProtfolioProject..CovidDeaths$ as dea
+join ProtfolioProject..CovidVaccinations$ as vac
+on dea.location= vac.location
+and dea.date = vac.date
+where dea.continent is not NULL
+order by  dea.location, dea.date
+
+--Using CTE
+with PopvsVac(date, continent, location, population, new_vaccinations, RollingPeopleVaccinated)
+as
+(select dea.date, dea.continent, dea.location, dea.population, vac.new_vaccinations,
+sum(convert(int,vac.new_vaccinations))over(partition by dea.location, dea.date) as RollingPeopleVaccinated
+--,(RollingPeopleVaccinated/population)*100
+from ProtfolioProject..CovidDeaths$ as dea
+join ProtfolioProject..CovidVaccinations$ as vac
+on dea.location= vac.location
+and dea.date = vac.date
+where dea.continent is not NULL
+--order by  dea.location, dea.date
+)
+select *, (RollingPeopleVaccinated/population)*100 as Vaccinatedpercentage
+from PopvsVac 
+order by Vaccinatedpercentage, location desc
+
+
+
+--TempTable
+create table #PercentPopulationVaccinated
+( continent nvarchar(255),
+location nvarchar(255),
+date datetime,
+population numeric,
+new_vaccination numeric,
+RollingPeopleVaccinated numeric)
+
+insert into #PercentPopulationVaccinated
+select dea.continent, dea.location, dea.date,  dea.population,  vac.new_vaccinations,
+sum(convert(int,vac.new_vaccinations))over(partition by dea.location, dea.date) as RollingPeopleVaccinated
+--,(RollingPeopleVaccinated/population)*100
+from ProtfolioProject..CovidDeaths$ as dea
+join ProtfolioProject..CovidVaccinations$ as vac
+on dea.location= vac.location
+and dea.date = vac.date
+where dea.continent is not NULL
+--order by  dea.location, dea.date
+select *, (RollingPeopleVaccinated/population)*100 as Vaccinatedpercentage
+from #PercentPopulationVaccinated
+
+drop table if exists #PercentPopulationVaccinated
+create table #PercentPopulationVaccinated
+( continent nvarchar(255),
+location nvarchar(255),
+date datetime,
+population numeric,
+new_vaccination numeric,
+RollingPeopleVaccinated numeric)
+
+insert into #PercentPopulationVaccinated select dea.continent, dea.location, dea.date,  dea.population,  vac.new_vaccinations,
+sum(convert(int,vac.new_vaccinations))over(partition by dea.location, dea.date) as RollingPeopleVaccinated
+--,(RollingPeopleVaccinated/population)*100
+from ProtfolioProject..CovidDeaths$ as dea
+join ProtfolioProject..CovidVaccinations$ as vac
+on dea.location= vac.location
+and dea.date = vac.date
+--where dea.continent is not NULL
+--order by  dea.location, dea.date
+select *, (RollingPeopleVaccinated/population)*100 as Vaccinatedpercentage
+from #PercentPopulationVaccinated
+
+--creating view to store data for later visulisation
+create view PercentPopulationVaccinated as
+select dea.continent, dea.location, dea.date,  dea.population,  vac.new_vaccinations,
+sum(convert(int,vac.new_vaccinations))over(partition by dea.location, dea.date) as RollingPeopleVaccinated
+--,(RollingPeopleVaccinated/population)*100
+from ProtfolioProject..CovidDeaths$ as dea
+join ProtfolioProject..CovidVaccinations$ as vac
+on dea.location= vac.location
+and dea.date = vac.date
+where dea.continent is not NULL
+--order by  dea.location, dea.date
+
+select*
+from PercentPopulationVaccinated
+
+create view ContinentDeathCount as
+select continent, max(cast(total_deaths as int))as TotalDeathCount
+from ProtfolioProject..CovidDeaths$
+--where location like '%Nepal%'
+where continent is not NULL
+group by continent
+--order by ContinentdealthCount desc
+
+select *
+from ContinentDeathCount
+
+create view NepalCovidPercentage as
+select location, date, total_cases,population , (total_cases/population)*100 as CovidPercentagePopulation
+from ProtfolioProject..CovidDeaths$
+where location like '%Nepal%'
+--order by 1, 2
+select *
+from NepalCovidPercentage
+
+create view NepaldeathPercentage as
+select location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+from ProtfolioProject..CovidDeaths$
+where location like '%Nepal%'
+--order by 1, 2 
+ 
